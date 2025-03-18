@@ -19,5 +19,6 @@ minCellCount <- 5L
 
 # data cut
 dataEndDate <- "..."
+censorAge <- 150L
 
 source(here::here("RunAnalysis.R"))
