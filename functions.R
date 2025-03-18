@@ -11,7 +11,7 @@ logMessage <- function(message) {
   close(con)
   invisible(NULL)
 }
-generateMinDateObservationPeriod <- function(cdm, dataEndDate) {
+generateMinDateObservationPeriod <- function(cdm, dataEndDate, censorAge) {
   # initial validation
   dataEndDate <- as.Date(dataEndDate)
   omopgenerics::validateCdmArgument(cdm = cdm)
@@ -53,12 +53,27 @@ generateMinDateObservationPeriod <- function(cdm, dataEndDate) {
   omopgenerics::dropSourceTable(cdm = cdm, name = nm1)
 
   cdm$observation_period <- x |>
+    PatientProfiles::addDateOfBirth(name = nm2) |>
     dplyr::rename(observation_period_start_date = "min_date") |>
     dplyr::mutate(
-      observation_period_end_date = .env$dataEndDate,
+      date_age = clock::add_years(.data$date_of_birth, !!as.integer(censorAge)),
+      observation_period_end_date = dplyr::if_else(
+        .data$date_age <= .env$dataEndDate, .data$date_age, .env$dataEndDate
+      ),
       period_type_concept_id = 0L,
       observation_period_id = dplyr::row_number()
     ) |>
+    dplyr::left_join(
+      cdm$death |>
+        dplyr::group_by(.data$person_id) |>
+        dplyr::summarise(death_date = min(.data$death_date, na.rm = TRUE)),
+      by = "person_id"
+    ) |>
+    dplyr::mutate(observation_period_end_date = dplyr::case_when(
+      is.na(.data$death_date) ~ .data$observation_period_end_date,
+      .data$death_date < .data$observation_period_end_date ~ .data$death_date,
+      .default = .data$observation_period_end_date
+    )) |>
     dplyr::select(
       "observation_period_id", "person_id", "observation_period_start_date",
       "observation_period_end_date", "period_type_concept_id"
@@ -143,8 +158,6 @@ generateVisitObservationPeriod <- function(cdm) {
     "drug_exposure", "condition_occurrence", "procedure_occurrence",
     "visit_occurrence", "device_exposure", "measurement", "observation", "death"
   )
-  nm1 <- omopgenerics::uniqueTableName()
-  nm2 <- omopgenerics::uniqueTableName()
   for (k in seq_along(tables)) {
     table <- tables[k]
     startDate <- omopgenerics::omopColumns(table = table, field = "start_date")
@@ -154,35 +167,30 @@ generateVisitObservationPeriod <- function(cdm) {
         "person_id",
         "start_date" = dplyr::all_of(startDate),
         "end_date" = dplyr::all_of(endDate)
-      ) |>
-      dplyr::mutate(end_date = dplyr::case_when(
-        is.na(.data$end_date) ~ .data$start_date,
-        .data$end_date < .data$start_date ~ .data$start_date,
-        .default = .data$end_date
-      )) |>
-      CohortConstructor:::joinOverlap(
-        name = nm1,
-        gap = 0L,
-        startDate = "start_date",
-        endDate = "end_date",
-        by = "person_id"
       )
     if (k > 1) {
       x <- x |>
-        dplyr::union_all(xk) |>
-        CohortConstructor:::joinOverlap(
-          name = nm2,
-          gap = 0L,
-          startDate = "start_date",
-          endDate = "end_date",
-          by = "person_id"
-        )
+        dplyr::union_all(xk)
     } else {
       x <- xk
     }
   }
-  omopgenerics::dropSourceTable(cdm = cdm, name = nm1)
+  logMessage("join overlap")
+  x <- x |>
+    dplyr::mutate(end_date = dplyr::case_when(
+      is.na(.data$end_date) ~ .data$start_date,
+      .data$end_date < .data$start_date ~ .data$start_date,
+      .default = .data$end_date
+    )) |>
+    CohortConstructor:::joinOverlap(
+      name = "observation_period",
+      gap = 0L,
+      startDate = "start_date",
+      endDate = "end_date",
+      by = "person_id"
+    )
 
+  logMessage("final summary")
   cdm$observation_period <- x |>
     dplyr::rename(
       observation_period_start_date = "start_date",
@@ -202,14 +210,14 @@ generateVisitObservationPeriod <- function(cdm) {
   return(cdm)
 }
 erafyObservationPeriod <- function(cdm, gap = 0L) {
-  cdm$observation_period |>
+  cdm$observation_period <- cdm$observation_period |>
     dplyr::select(
       "person_id", "observation_period_start_date",
       "observation_period_end_date"
     ) |>
     CohortConstructor:::joinOverlap(
       name = "observation_period",
-      gap = 0L,
+      gap = gap,
       startDate = "observation_period_start_date",
       endDate = "observation_period_end_date",
       by = "person_id"
@@ -223,14 +231,31 @@ erafyObservationPeriod <- function(cdm, gap = 0L) {
       "observation_period_end_date", "period_type_concept_id"
     ) |>
     dplyr::compute(name = "observation_period")
+  return(cdm)
 }
 summaryInObservation <- function(cdm, mode) {
-  result <- OmopSketch::summariseInObservation(
+  ageGroup <- list(c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, Inf))
+  logMessage("summarise in observation")
+  res1 <- OmopSketch::summariseInObservation(
     cdm$observation_period,
     interval = "years",
-    output = c("record", "person-days"),
+    output = c("records", "person-days"),
+    ageGroup = ageGroup,
     sex = TRUE
   )
+  logMessage("summarise observation metrics")
+  res2 <- OmopSketch::summariseObservationPeriod(
+    observationPeriod = cdm$observation_period,
+    estimates = c("mean", "sd", "min", "q25", "median", "q75", "max", "density"),
+    ageGroup = ageGroup,
+    sex = TRUE
+  ) |>
+    dplyr::filter(
+      !stringr::str_detect(.data$estimate_name, "density") ||
+        .data$group_level == "all"
+    )
+  logMessage("bind result")
+  result <- omopgenerics::bind(res1, res2)
   result |>
     omopgenerics::newSummarisedResult(
       settings = omopgenerics::settings(result) |>
