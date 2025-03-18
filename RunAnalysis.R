@@ -13,13 +13,17 @@ cdm <- CDMConnector::cdmFromCon(
   writePrefix = writePrefix, cdmName = dbName
 )
 
+# snapshot
+logMessage("Extract cdm snapshot")
+snapshot <- OmopSketch::summariseOmopSnapshot(cdm)
+
 # original observation period
 logMessage("Characterise original observation period")
 originalResult <- summaryInObservation(cdm, "original_data")
 
 # min-extract observation period
 logMessage("Create min-extract observation period")
-cdm <- generateMinDateObservationPeriod(cdm)
+cdm <- generateMinDateObservationPeriod(cdm, dataEndDate, censorAge)
 logMessage("Characterise min-extract observation period")
 minExtractResult <- summaryInObservation(cdm, "min_extract")
 
@@ -56,6 +60,7 @@ visit730Result <- summaryInObservation(cdm, "visit_730_gap")
 # export data
 logMessage("Export results")
 omopgenerics::exportSummarisedResult(
+  snapshot,
   originalResult,
   minExtractResult,
   minMaxResult,

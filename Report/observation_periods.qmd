@@ -1,0 +1,32 @@
+---
+title: "Observation periods"
+format: html
+editor: visual
+---
+
+## Observation periods
+
+```{r}
+result <- omopgenerics::importSummarisedResult(here::here("data"))
+```
+
+```{r}
+x <- result |>
+  omopgenerics::filterSettings(.data$result_type == "summarise_in_observation") |>
+  omopgenerics::tidy() |>
+  dplyr::mutate(year = as.integer(substr(.data$time_interval, 1, 4))) |>
+  dplyr::select(!c("variable_level", "interval", "percentage", "time_interval"))
+x |>
+  dplyr::filter(.data$variable_name == "Number records in observation") |>
+  ggplot2::ggplot(mapping = ggplot2::aes(x = year, y = count, colour = mode)) +
+  ggplot2::geom_point() +
+  ggplot2::geom_line() +
+  ggplot2::facet_grid(cdm_name ~ sex)
+x |>
+  dplyr::filter(.data$variable_name == "Number person-days") |>
+  ggplot2::ggplot(mapping = ggplot2::aes(x = year, y = count, colour = mode)) +
+  ggplot2::geom_point() +
+  ggplot2::geom_line() +
+  ggplot2::facet_grid(sex ~ cdm_name)
+```
+
