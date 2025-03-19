@@ -334,16 +334,20 @@ summaryInObservation <- function(cdm, mode) {
         c("count", "percentage")
       ),
       counts = TRUE
-    )
+    ) |>
+    suppressMessages()
   recordsPerPerson <- cdm$observation_period |>
     dplyr::group_by(.data$person_id) |>
-    dplyr::summarise(number_observation_periods = dplyr::n()) |>
+    dplyr::summarise(op_per_person = dplyr::n()) |>
+    dplyr::inner_join(cdm$person |> dplyr::select("person_id"), by = "person_id") |>
     dplyr::collect() |>
+    dplyr::mutate(op_per_person = dplyr::coalesce(as.integer(.data$op_per_person), 0L)) |>
     PatientProfiles::summariseResult(
-      variables = "number_observation_periods",
+      variables = "op_per_person",
       estimates = c("median", "q25", "q75", "min", "max", "density"),
       counts = FALSE
-    )
+    ) |>
+    suppressMessages()
   omopgenerics::dropSourceTable(cdm = cdm, name = nm)
 
   logMessage("generate denominator cohort")
@@ -351,7 +355,7 @@ summaryInObservation <- function(cdm, mode) {
     cdm = cdm,
     name = "denominator",
     cohortDateRange = as.Date(c("2012-01-01", NA)),
-    sex = TRUE,
+    sex = c("Both", "Female", "Male"),
     ageGroup = ageGroup |>
       purrr::map(\(x) {
         x[is.infinite(x)] <- 150
@@ -389,5 +393,6 @@ diffdate <- function(x, col1, col2, colname, plusOne) {
     as.character() |>
     rlang::parse_exprs() |>
     rlang::set_names(nm = colname)
-  dplyr::mutate(x, !!!q)
+  x %>%
+    dplyr::mutate(!!!q)
 }

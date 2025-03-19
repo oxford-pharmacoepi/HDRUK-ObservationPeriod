@@ -1,3 +1,4 @@
+library(magrittr)
 
 # source functions and create logger
 source(here::here("Analysis", "functions.R"))
