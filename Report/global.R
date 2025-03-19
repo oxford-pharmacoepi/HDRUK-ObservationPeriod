@@ -20,17 +20,14 @@ library(tidyr)
 library(visOmopResults)
 library(yaml)
 
-# preprocess data if it has not been done
+# load shiny data
 fileData <- file.path(getwd(), "data", "shinyData.RData")
 if (!file.exists(fileData)) {
+  # preprocess data if it has not been done
   source(file.path(getwd(), "data", "preprocess.R"))
+} else {
+  load(fileData)
 }
-
-# uncomment to load the raw data
-# rawData <- omopgenerics::importSummarisedResult(file.path(getwd(), "data"))
-
-# load shiny data
-load(fileData)
 
 # source functions
 source(file.path(getwd(), "functions.R"))

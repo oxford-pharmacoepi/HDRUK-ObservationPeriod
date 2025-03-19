@@ -2,236 +2,120 @@
 # Be careful editing this file
 
 server <- function(input, output, session) {
-  # download raw data -----
-  output$download_raw <- shiny::downloadHandler(
-    filename = "results.csv",
-    content = function(file) {
-      omopgenerics::exportSummarisedResult(data, fileName = file)
-    }
-  )
+
   # summarise_omop_snapshot -----
-  ## tidy summarise_omop_snapshot -----
-  getTidyDataSummariseOmopSnapshot <- shiny::reactive({
-    res <- data |>
-      filterData("summarise_omop_snapshot", input) |>
-      omopgenerics::addSettings() |>
-      omopgenerics::splitAll() |>
-      dplyr::select(!"result_id")
-
-    # columns to eliminate
-    colsEliminate <- colnames(res)
-    colsEliminate <- colsEliminate[!colsEliminate %in% c(
-      input$summarise_omop_snapshot_tidy_columns, "variable_name", "variable_level",
-      "estimate_name", "estimate_type", "estimate_value"
-    )]
-
-    # pivot
-    pivot <- input$summarise_omop_snapshot_tidy_pivot
-    if (pivot != "none") {
-      vars <- switch(pivot,
-        "estimates" = "estimate_name",
-        "estimates and variables" = c("variable_name", "variable_level", "estimate_name")
-      )
-      res <- res |>
-        visOmopResults::pivotEstimates(pivotEstimatesBy = vars)
-    }
-
-    res |>
-      dplyr::select(!dplyr::all_of(colsEliminate))
+  output$summarise_omop_snapshot_gt <- gt::render_gt({
+    OmopSketch::tableOmopSnapshot(data$snapshot)
   })
-  output$summarise_omop_snapshot_tidy <- DT::renderDT({
-    DT::datatable(
-      getTidyDataSummariseOmopSnapshot(),
-      options = list(scrollX = TRUE),
-      rownames = FALSE
-    )
-  })
-  output$summarise_omop_snapshot_tidy_download <- shiny::downloadHandler(
-    filename = "tidy_summarise_omop_snapshot.csv",
-    content = function(file) {
-      getTidyDataSummariseOmopSnapshot() |>
-        readr::write_csv(file = file)
-    }
-  )
-  ## output summarise_omop_snapshot -----
-  ## output 17 -----
-  createOutput17 <- shiny::reactive({
-    result <- data |>
-      filterData("summarise_omop_snapshot", input)
-    OmopSketch::tableOmopSnapshot(
-      result
-    )
-  })
-  output$summarise_omop_snapshot_gt_17 <- gt::render_gt({
-    createOutput17()
-  })
-  output$summarise_omop_snapshot_gt_17_download <- shiny::downloadHandler(
-    filename = paste0("output_gt_summarise_omop_snapshot.", input$summarise_omop_snapshot_gt_17_download_type),
-    content = function(file) {
-      obj <- createOutput17()
-      gt::gtsave(data = obj, filename = file)
-    }
-  )
-
 
   # summarise_in_observation -----
-  ## tidy summarise_in_observation -----
-  getTidyDataSummariseInObservation <- shiny::reactive({
-    res <- data |>
-      filterData("summarise_in_observation", input) |>
-      omopgenerics::addSettings() |>
-      omopgenerics::splitAll() |>
-      dplyr::select(!"result_id")
-
-    # columns to eliminate
-    colsEliminate <- colnames(res)
-    colsEliminate <- colsEliminate[!colsEliminate %in% c(
-      input$summarise_in_observation_tidy_columns, "variable_name", "variable_level",
-      "estimate_name", "estimate_type", "estimate_value"
-    )]
-
-    # pivot
-    pivot <- input$summarise_in_observation_tidy_pivot
-    if (pivot != "none") {
-      vars <- switch(pivot,
-        "estimates" = "estimate_name",
-        "estimates and variables" = c("variable_name", "variable_level", "estimate_name")
+  # get data
+  getInObservationData <- shiny::reactive({
+    data$in_obs |>
+      dplyr::filter(
+        .data$cdm_name %in% input$summarise_in_observation_cdm_name,
+        .data$sex %in% input$summarise_in_observation_sex,
+        .data$age_group %in% input$summarise_in_observation_age_group,
+        .data$variable_name %in% input$summarise_in_observation_variable_name,
+        .data$mode %in% input$summarise_in_observation_mode
       )
-      res <- res |>
-        visOmopResults::pivotEstimates(pivotEstimatesBy = vars)
-    }
-
-    res |>
-      dplyr::select(!dplyr::all_of(colsEliminate))
   })
-  output$summarise_in_observation_tidy <- DT::renderDT({
-    DT::datatable(
-      getTidyDataSummariseInObservation(),
-      options = list(scrollX = TRUE),
-      rownames = FALSE
+  output$summarise_in_observation_tidy <- DT::renderDataTable(
+    getInObservationData()
+  )
+  output$summarise_in_observation_ggplot2 <- shiny::renderPlot({
+    x <- getInObservationData()
+
+    fx <- input$summarise_in_observation_facet_x
+    if (length(fx) > 0) {
+      fx <- paste0(fx, collapse = " + ")
+    } else {
+      fx <- "."
+    }
+    fy <- input$summarise_in_observation_facet_y
+    if (length(fy) > 0) {
+      fy <- paste0(fy, collapse = " + ")
+    } else {
+      fy <- "."
+    }
+    form <- as.formula(paste0(fy, " ~ ", fx))
+
+    visOmopResults::scatterPlot(
+      result = x,
+      x = "year",
+      y = "count",
+      line = TRUE,
+      point = TRUE,
+      ribbon = FALSE,
+      colour = input$summarise_in_observation_colour,
+      facet = form
     )
   })
-  output$summarise_in_observation_tidy_download <- shiny::downloadHandler(
-    filename = "tidy_summarise_in_observation.csv",
-    content = function(file) {
-      getTidyDataSummariseInObservation() |>
-        readr::write_csv(file = file)
-    }
-  )
-  ## output summarise_in_observation -----
-  ## output 0 -----
-  createOutput0 <- shiny::reactive({
-    result <- data |>
-      filterData("summarise_in_observation", input)
-    simpleTable(
-      result,
-      header = input$summarise_in_observation_gt_0_header,
-      group = input$summarise_in_observation_gt_0_group,
-      hide = input$summarise_in_observation_gt_0_hide
-    )
-  })
-  output$summarise_in_observation_gt_0 <- gt::render_gt({
-    createOutput0()
-  })
-  output$summarise_in_observation_gt_0_download <- shiny::downloadHandler(
-    filename = paste0("output_gt_summarise_in_observation.", input$summarise_in_observation_gt_0_download_type),
-    content = function(file) {
-      obj <- createOutput0()
-      gt::gtsave(data = obj, filename = file)
-    }
-  )
-
 
   # summarise_observation_period -----
-  ## tidy summarise_observation_period -----
-  getTidyDataSummariseObservationPeriod <- shiny::reactive({
-    res <- data |>
-      filterData("summarise_observation_period", input) |>
-      omopgenerics::addSettings() |>
+  # get data
+  getObservationPeriodData <- shiny::reactive({
+    data$obs_period |>
+      dplyr::filter(
+        .data$cdm_name %in% input$summarise_observation_period_cdm_name,
+        .data$variable_name %in% input$summarise_observation_period_variable_name
+      ) |>
+      omopgenerics::filterStrata(
+        .data$sex %in% input$summarise_observation_period_sex,
+        .data$age_group %in% input$summarise_observation_period_age_group
+      ) |>
+      omopgenerics::filterSettings(
+        .data$mode %in% input$summarise_observation_period_mode
+      )
+  })
+  output$summarise_observation_period_gt <- gt::render_gt({
+    getObservationPeriodData() |>
+      dplyr::filter(.data$estimate_name %in% c("count", "median", "q25", "q75")) |>
+      omopgenerics::addSettings(settingsColumn = "mode") |>
       omopgenerics::splitAll() |>
-      dplyr::select(!"result_id")
-
-    # columns to eliminate
-    colsEliminate <- colnames(res)
-    colsEliminate <- colsEliminate[!colsEliminate %in% c(
-      input$summarise_observation_period_tidy_columns, "variable_name", "variable_level",
-      "estimate_name", "estimate_type", "estimate_value"
-    )]
-
-    # pivot
-    pivot <- input$summarise_observation_period_tidy_pivot
-    if (pivot != "none") {
-      vars <- switch(pivot,
-        "estimates" = "estimate_name",
-        "estimates and variables" = c("variable_name", "variable_level", "estimate_name")
+      dplyr::select(!c("variable_level", "observation_period_ordinal", "result_id")) |>
+      visOmopResults::visTable(
+        estimateName = c(
+          "N" = "<count>",
+          "median [Q25 - Q75]" = "<median> [<q25> - <q75>]"
+        ),
+        header = c("cdm_name", "mode"),
+        groupColumn = c("age_group", "sex")
       )
-      res <- res |>
-        visOmopResults::pivotEstimates(pivotEstimatesBy = vars)
-    }
+  })
+  output$summarise_observation_period_ggplot2 <- shiny::renderPlot({
+    x <- getObservationPeriodData() |>
+      dplyr::filter(.data$estimate_name %in% c("density_x", "density_y"))
+    nvars <- length(unique(x$variable_name))
+    shiny::validate(shiny::need(nvars == 1, "Only one variable must be provided"))
 
-    res |>
-      dplyr::select(!dplyr::all_of(colsEliminate))
-  })
-  output$summarise_observation_period_tidy <- DT::renderDT({
-    DT::datatable(
-      getTidyDataSummariseObservationPeriod(),
-      options = list(scrollX = TRUE),
-      rownames = FALSE
-    )
-  })
-  output$summarise_observation_period_tidy_download <- shiny::downloadHandler(
-    filename = "tidy_summarise_observation_period.csv",
-    content = function(file) {
-      getTidyDataSummariseObservationPeriod() |>
-        readr::write_csv(file = file)
-    }
-  )
-  ## output summarise_observation_period -----
-  ## output 15 -----
-  createOutput15 <- shiny::reactive({
-    result <- data |>
-      filterData("summarise_observation_period", input)
-    OmopSketch::tableObservationPeriod(
-      result
-    )
-  })
-  output$summarise_observation_period_gt_15 <- gt::render_gt({
-    createOutput15()
-  })
-  output$summarise_observation_period_gt_15_download <- shiny::downloadHandler(
-    filename = paste0("output_gt_summarise_observation_period.", input$summarise_observation_period_gt_15_download_type),
-    content = function(file) {
-      obj <- createOutput15()
-      gt::gtsave(data = obj, filename = file)
-    }
-  )
+    x <- x |>
+      omopgenerics::tidy()
 
-  ## output 16 -----
-  createOutput16 <- shiny::reactive({
-    result <- data |>
-      filterData("summarise_observation_period", input)
-    OmopSketch::plotObservationPeriod(
-      result,
-      variableName = input$summarise_observation_period_ggplot2_16_variableName,
-      plotType = input$summarise_observation_period_ggplot2_16_plotType,
-      facet = input$summarise_observation_period_ggplot2_16_facet
+    fx <- input$summarise_observation_period_facet_x
+    if (length(fx) > 0) {
+      fx <- paste0(fx, collapse = " + ")
+    } else {
+      fx <- "."
+    }
+    fy <- input$summarise_observation_period_facet_y
+    if (length(fy) > 0) {
+      fy <- paste0(fy, collapse = " + ")
+    } else {
+      fy <- "."
+    }
+    form <- as.formula(paste0(fy, " ~ ", fx))
+
+    visOmopResults::scatterPlot(
+      result = x,
+      x = "density_x",
+      y = "density_y",
+      line = TRUE,
+      point = TRUE,
+      ribbon = FALSE,
+      colour = input$summarise_observation_period_colour,
+      facet = form
     )
   })
-  output$summarise_observation_period_ggplot2_16 <- shiny::renderPlot({
-    createOutput16()
-  })
-  output$summarise_observation_period_ggplot2_16_download <- shiny::downloadHandler(
-    filename = paste0("output_ggplot2_summarise_observation_period.", "png"),
-    content = function(file) {
-      obj <- createOutput16()
-      ggplot2::ggsave(
-        filename = file,
-        plot = obj,
-        width = as.numeric(input$summarise_observation_period_ggplot2_16_download_width),
-        height = as.numeric(input$summarise_observation_period_ggplot2_16_download_height),
-        units = input$summarise_observation_period_ggplot2_16_download_units,
-        dpi = as.numeric(input$summarise_observation_period_ggplot2_16_download_dpi)
-      )
-    }
-  )
+
 }
