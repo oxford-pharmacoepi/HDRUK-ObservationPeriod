@@ -12,16 +12,14 @@ ui <- bslib::page_navbar(
     ),
     ""
   ),
-  theme = bslib::bs_theme(),
+  theme = bslib::bs_theme(bootswatch = "cosmo"),
   bslib::nav_panel(
     title = "Background",
-    icon = shiny::icon("disease"),
     backgroundCard("background.md")
   ),
   ## snapshot ----
   bslib::nav_panel(
     title = "Snapshot",
-    icon = shiny::icon("clipboard-list"),
     bslib::card(
       full_screen = TRUE,
       gt::gt_output("summarise_omop_snapshot_gt")
@@ -30,7 +28,6 @@ ui <- bslib::page_navbar(
   ## summarise in observation
   bslib::nav_panel(
     title = "Summarise in observation",
-    icon = shiny::icon(""),
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
         shinyWidgets::pickerInput(
@@ -124,7 +121,6 @@ ui <- bslib::page_navbar(
   ## summarise observation period ----
   bslib::nav_panel(
     title = "Observation period",
-    icon = shiny::icon("eye"),
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
         shinyWidgets::pickerInput(
@@ -199,7 +195,6 @@ ui <- bslib::page_navbar(
   ## incidence ----
   bslib::nav_panel(
     title = "Incidence",
-    icon = shiny::icon("eye"),
     bslib::layout_sidebar(
       sidebar = bslib::sidebar(
         shinyWidgets::pickerInput(
@@ -214,7 +209,7 @@ ui <- bslib::page_navbar(
           inputId = "incidence_age_group",
           label = "Age group",
           choices = ageGroups,
-          selected = ageGroups,
+          selected = "overall",
           multiple = TRUE,
           options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
         ),
@@ -222,7 +217,7 @@ ui <- bslib::page_navbar(
           inputId = "incidence_sex",
           label = "Sex",
           choices = sexes,
-          selected = sexes,
+          selected = "overall",
           multiple = TRUE,
           options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
         ),
