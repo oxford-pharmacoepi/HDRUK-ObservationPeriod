@@ -27,7 +27,8 @@ codelist <- CodelistGenerator::getDrugIngredientCodes(
 )
 cdm <- DrugUtilisation::generateDrugUtilisationCohortSet(
   cdm = cdm, conceptSet = codelist, name = "outcome"
-)
+) |>
+  suppressMessages()
 
 # original observation period
 logMessage("Characterise original observation period")
