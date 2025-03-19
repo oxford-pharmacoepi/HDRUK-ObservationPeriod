@@ -250,10 +250,7 @@ summaryInObservation <- function(cdm, mode) {
     ageGroup = ageGroup,
     sex = TRUE
   ) |>
-    dplyr::filter(
-      !stringr::str_detect(.data$estimate_name, "density") ||
-        .data$group_level == "all"
-    )
+    dplyr::filter(.data$group_level == "all")
   logMessage("bind result")
   result <- omopgenerics::bind(res1, res2)
   result |>
