@@ -56,10 +56,10 @@ generateMinDateObservationPeriod <- function(cdm, dataEndDate, censorAge) {
     PatientProfiles::addDateOfBirth(name = nm2) |>
     dplyr::rename(observation_period_start_date = "min_date") |>
     dplyr::mutate(
-      date_age = clock::add_years(.data$date_of_birth, !!as.integer(censorAge)),
+      date_age = as.Date(clock::add_years(.data$date_of_birth, !!as.integer(censorAge)),
       observation_period_end_date = dplyr::if_else(
         .data$date_age <= .env$dataEndDate, .data$date_age, .env$dataEndDate
-      ),
+      )),
       period_type_concept_id = 0L,
       observation_period_id = dplyr::row_number()
     ) |>
@@ -262,6 +262,7 @@ summaryInObservation <- function(cdm, mode) {
   logMessage("summarise observation metrics")
   nm <- omopgenerics::uniqueTableName()
   characteristics <- cdm$observation_period |>
+    dplyr::group_by(.data$person_id) |>
     dplyr::mutate(next_observation = dplyr::lead(
       .data$observation_period_start_date,
       order_by = .data$observation_period_start_date
@@ -272,6 +273,7 @@ summaryInObservation <- function(cdm, mode) {
       colname = c("duration", "time_to_next_observation"),
       plusOne = c(TRUE, FALSE)
     ) |>
+    dplyr::ungroup() |>
     PatientProfiles::addAgeQuery(
       indexDate = "observation_period_start_date",
       ageName = "age_start",
