@@ -60,45 +60,106 @@ server <- function(input, output, session) {
         .data$cdm_name %in% input$summarise_observation_period_cdm_name,
         .data$variable_name %in% input$summarise_observation_period_variable_name
       ) |>
-      omopgenerics::filterStrata(
-        .data$sex %in% input$summarise_observation_period_sex,
-        .data$age_group %in% input$summarise_observation_period_age_group
-      ) |>
       omopgenerics::filterSettings(
         .data$mode %in% input$summarise_observation_period_mode
       )
   })
   output$summarise_observation_period_gt <- gt::render_gt({
     getObservationPeriodData() |>
-      dplyr::filter(.data$estimate_name %in% c("count", "median", "q25", "q75")) |>
+      dplyr::filter(.data$estimate_name %in% c(
+        "count", "percentage", "median", "q25", "q75", "min", "max"
+      )) |>
       omopgenerics::addSettings(settingsColumn = "mode") |>
       omopgenerics::splitAll() |>
-      dplyr::select(!c("variable_level", "observation_period_ordinal", "result_id")) |>
+      dplyr::select(!c("result_id")) |>
       visOmopResults::visTable(
         estimateName = c(
+          "N (%)" = "<count> (<percentage>%)",
           "N" = "<count>",
-          "median [Q25 - Q75]" = "<median> [<q25> - <q75>]"
+          "median [Q25 - Q75]" = "<median> [<q25> - <q75>]",
+          "Range" = "<min> to <max>"
         ),
         header = c("cdm_name", "mode"),
-        groupColumn = c("age_group", "sex")
+        hide = "estimate_type"
       )
   })
   output$summarise_observation_period_ggplot2 <- shiny::renderPlot({
     x <- getObservationPeriodData() |>
       dplyr::filter(.data$estimate_name %in% c("density_x", "density_y"))
     nvars <- length(unique(x$variable_name))
+
     shiny::validate(shiny::need(nvars == 1, "Only one variable must be provided"))
 
     x <- x |>
       omopgenerics::tidy()
 
-    fx <- input$summarise_observation_period_facet_x
+    p <- visOmopResults::scatterPlot(
+      result = x,
+      x = "density_x",
+      y = "density_y",
+      line = TRUE,
+      point = FALSE,
+      ribbon = FALSE,
+      colour = input$summarise_observation_period_colour,
+      facet = input$summarise_observation_period_facet
+    )
+
+    xmax <- input$summarise_observation_x_max
+    if (xmax > 0) {
+      p <- p +
+        ggplot2::xlim(c(0, xmax))
+    }
+
+    p
+  })
+
+  # incidence ----
+  getIncidenceData <- shiny::reactive({
+    data$incidence |>
+      dplyr::filter(
+        .data$cdm_name %in% input$incidence_cdm_name,
+        .data$outcome %in% input$incidence_outcome,
+        .data$age_group %in% input$incidence_age_group,
+        .data$sex %in% input$incidence_sex,
+        .data$analysis_interval %in% input$incidence_interval
+      )
+  })
+  output$incidence_gt <- gt::render_gt({
+    ds <- c("analysis_interval")
+    if (input$incidence_interval == "overall") {
+      ds <- c(ds, "year")
+    }
+    getIncidenceData() |>
+      dplyr::select(!dplyr::all_of(ds)) |>
+      dplyr::relocate(c("age_group", "sex")) |>
+      visOmopResults::visTable(
+        estimateName = c(
+          "Outcomes" = "<outcome_count>",
+          "Denominator" = "<denominator_count>",
+          "Incidence" = "<incidence_100000_pys> [<incidence_100000_pys_95CI_lower> - <incidence_100000_pys_95CI_upper>]"
+        ),
+        header = c("cdm_name", "mode"),
+        groupColumn = "outcome",
+        hide = "estimate_type"
+      )
+  })
+  output$incidence_ggplot2 <- shiny::renderPlot({
+    x <- getIncidenceData() |>
+      dplyr::filter(stringr::str_detect(.data$estimate_name, "incidence")) |>
+      omopgenerics::pivotEstimates()
+
+    if (input$incidence_interval == "overall") {
+      x <- x |>
+        dplyr::mutate(year = "overall")
+    }
+
+    fx <- input$incidence_facet_x
     if (length(fx) > 0) {
       fx <- paste0(fx, collapse = " + ")
     } else {
       fx <- "."
     }
-    fy <- input$summarise_observation_period_facet_y
+    fy <- input$incidence_facet_y
     if (length(fy) > 0) {
       fy <- paste0(fy, collapse = " + ")
     } else {
@@ -108,12 +169,14 @@ server <- function(input, output, session) {
 
     visOmopResults::scatterPlot(
       result = x,
-      x = "density_x",
-      y = "density_y",
-      line = TRUE,
+      x = input$incidence_x,
+      y = "incidence_100000_pys",
+      ymin = "incidence_100000_pys_95CI_lower",
+      ymax = "incidence_100000_pys_95CI_upper",
+      line = FALSE,
       point = TRUE,
       ribbon = FALSE,
-      colour = input$summarise_observation_period_colour,
+      colour = input$incidence_colour,
       facet = form
     )
   })

@@ -18,6 +18,7 @@ ui <- bslib::page_navbar(
     icon = shiny::icon("disease"),
     backgroundCard("background.md")
   ),
+  ## snapshot ----
   bslib::nav_panel(
     title = "Snapshot",
     icon = shiny::icon("clipboard-list"),
@@ -26,6 +27,7 @@ ui <- bslib::page_navbar(
       gt::gt_output("summarise_omop_snapshot_gt")
     )
   ),
+  ## summarise in observation
   bslib::nav_panel(
     title = "Summarise in observation",
     icon = shiny::icon(""),
@@ -104,7 +106,7 @@ ui <- bslib::page_navbar(
                 ),
                 shinyWidgets::pickerInput(
                   inputId = "summarise_in_observation_colour",
-                  label = "Facet y",
+                  label = "Colour",
                   choices = c("cdm_name", "age_group", "sex", "mode"),
                   selected = "mode",
                   multiple = TRUE,
@@ -119,6 +121,7 @@ ui <- bslib::page_navbar(
       )
     )
   ),
+  ## summarise observation period ----
   bslib::nav_panel(
     title = "Observation period",
     icon = shiny::icon("eye"),
@@ -129,22 +132,6 @@ ui <- bslib::page_navbar(
           label = "CDM name",
           choices = cdmNames,
           selected = cdmNames,
-          multiple = TRUE,
-          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
-        ),
-        shinyWidgets::pickerInput(
-          inputId = "summarise_observation_period_sex",
-          label = "Sex",
-          choices = sexes,
-          selected = "overall",
-          multiple = TRUE,
-          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
-        ),
-        shinyWidgets::pickerInput(
-          inputId = "summarise_observation_period_age_group",
-          label = "Age group",
-          choices = ageGroups,
-          selected = "overall",
           multiple = TRUE,
           options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
         ),
@@ -180,32 +167,139 @@ ui <- bslib::page_navbar(
             bslib::layout_sidebar(
               sidebar = bslib::sidebar(
                 shinyWidgets::pickerInput(
-                  inputId = "summarise_observation_period_facet_x",
+                  inputId = "summarise_observation_period_facet",
                   label = "Facet x",
-                  choices = c("cdm_name", "age_group", "sex", "mode"),
+                  choices = c("cdm_name", "mode"),
                   selected = "cdm_name",
                   multiple = TRUE,
                   options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
                 ),
                 shinyWidgets::pickerInput(
-                  inputId = "summarise_observation_period_facet_y",
-                  label = "Facet y",
-                  choices = c("cdm_name", "age_group", "sex", "mode"),
+                  inputId = "summarise_observation_period_colour",
+                  label = "Colour",
+                  choices = c("cdm_name", "mode"),
+                  selected = "mode",
+                  multiple = TRUE,
+                  options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+                ),
+                shiny::numericInput(
+                  inputId = "summarise_observation_x_max",
+                  label = "X max",
+                  value = -1
+                ),
+                position = "right"
+              ),
+              shiny::plotOutput("summarise_observation_period_ggplot2")
+            )
+          )
+        )
+      )
+    )
+  ),
+  ## incidence ----
+  bslib::nav_panel(
+    title = "Incidence",
+    icon = shiny::icon("eye"),
+    bslib::layout_sidebar(
+      sidebar = bslib::sidebar(
+        shinyWidgets::pickerInput(
+          inputId = "incidence_cdm_name",
+          label = "CDM name",
+          choices = cdmNames,
+          selected = cdmNames,
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+        ),
+        shinyWidgets::pickerInput(
+          inputId = "incidence_age_group",
+          label = "Age group",
+          choices = ageGroups,
+          selected = ageGroups,
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+        ),
+        shinyWidgets::pickerInput(
+          inputId = "incidence_sex",
+          label = "Sex",
+          choices = sexes,
+          selected = sexes,
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+        ),
+        shinyWidgets::pickerInput(
+          inputId = "incidence_mode",
+          label = "Mode",
+          choices = modes,
+          selected = modes,
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+        ),
+        shinyWidgets::pickerInput(
+          inputId = "incidence_interval",
+          label = "Interval",
+          choices = c("overall", "years"),
+          selected = "overall",
+          multiple = FALSE,
+          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+        ),
+        shinyWidgets::pickerInput(
+          inputId = "incidence_outcome",
+          label = "Outcome",
+          choices = data$incidence$outcome |> unique(),
+          selected = data$incidence$outcome |> unique() |> dplyr::first(),
+          multiple = TRUE,
+          options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+        )
+      ),
+      bslib::navset_card_tab(
+        bslib::nav_panel(
+          title = "Table Incidence",
+          bslib::card(
+            full_screen = TRUE,
+            gt::gt_output("incidence_gt")
+          )
+        ),
+        bslib::nav_panel(
+          title = "Plot Incidence",
+          bslib::card(
+            full_screen = TRUE,
+            bslib::layout_sidebar(
+              sidebar = bslib::sidebar(
+                shinyWidgets::pickerInput(
+                  inputId = "incidence_x",
+                  label = "x",
+                  choices = c("cdm_name", "outcome", "age_group", "sex", "year", "mode"),
+                  selected = "year",
+                  multiple = TRUE,
+                  options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+                ),
+                shinyWidgets::pickerInput(
+                  inputId = "incidence_facet_x",
+                  label = "Facet x",
+                  choices = c("cdm_name", "outcome", "age_group", "sex", "year", "mode"),
                   selected = c("age_group", "sex"),
                   multiple = TRUE,
                   options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
                 ),
                 shinyWidgets::pickerInput(
-                  inputId = "summarise_observation_period_colour",
+                  inputId = "incidence_facet_y",
                   label = "Facet y",
-                  choices = c("cdm_name", "age_group", "sex", "mode"),
+                  choices = c("cdm_name", "outcome", "age_group", "sex", "year", "mode"),
+                  selected = c("cdm_name"),
+                  multiple = TRUE,
+                  options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
+                ),
+                shinyWidgets::pickerInput(
+                  inputId = "incidence_colour",
+                  label = "Colour",
+                  choices = c("cdm_name", "outcome", "age_group", "sex", "year", "mode"),
                   selected = "mode",
                   multiple = TRUE,
                   options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
                 ),
                 position = "right"
               ),
-              shiny::plotOutput("summarise_observation_period_ggplot2")
+              shiny::plotOutput("incidence_ggplot2")
             )
           )
         )
