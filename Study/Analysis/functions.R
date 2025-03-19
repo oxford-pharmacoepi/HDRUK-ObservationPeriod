@@ -56,10 +56,10 @@ generateMinDateObservationPeriod <- function(cdm, dataEndDate, censorAge) {
     PatientProfiles::addDateOfBirth(name = nm2) |>
     dplyr::rename(observation_period_start_date = "min_date") |>
     dplyr::mutate(
-      date_age = as.Date(clock::add_years(.data$date_of_birth, !!as.integer(censorAge)),
+      date_age = as.Date(clock::add_years(.data$date_of_birth, !!as.integer(censorAge))),
       observation_period_end_date = dplyr::if_else(
         .data$date_age <= .env$dataEndDate, .data$date_age, .env$dataEndDate
-      )),
+      ),
       period_type_concept_id = 0L,
       observation_period_id = dplyr::row_number()
     ) |>
@@ -361,7 +361,8 @@ summaryInObservation <- function(cdm, mode) {
     sex = c("Both", "Female", "Male"),
     ageGroup = ageGroup2,
     daysPriorObservation = 0L
-  )
+  ) |>
+    suppressMessages()
 
   logMessage("calculate incidence")
   incidence <- IncidencePrevalence::estimateIncidence(
@@ -372,7 +373,8 @@ summaryInObservation <- function(cdm, mode) {
     repeatedEvents = TRUE,
     outcomeWashout = 30,
     completeDatabaseIntervals = FALSE
-  )
+  ) |>
+    suppressMessages()
   omopgenerics::dropSourceTable(cdm = cdm, name = "denominator")
 
   logMessage("bind result")
