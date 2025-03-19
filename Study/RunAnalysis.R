@@ -17,6 +17,15 @@ cdm <- CDMConnector::cdmFromCon(
 logMessage("Extract cdm snapshot")
 snapshot <- OmopSketch::summariseOmopSnapshot(cdm)
 
+# instantiate antibiotics cohorts
+logMessage("Instantiate antibiotics cohorts")
+codelist <- CodelistGenerator::getDrugIngredientCodes(
+  cdm = cdm, name = c("acetaminophen")
+)
+cdm <- DrugUtilisation::generateDrugUtilisationCohortSet(
+  cdm = cdm, conceptSet = codelist, name = "outcome"
+)
+
 # original observation period
 logMessage("Characterise original observation period")
 originalResult <- summaryInObservation(cdm, "original_data")
@@ -33,29 +42,26 @@ cdm <- generateMinMaxObservationPeriod(cdm)
 logMessage("Characterise min-max observation period")
 minMaxResult <- summaryInObservation(cdm, "min_max")
 
-# visit observation period
 logMessage("Create visit observation period")
-cdm <- generateVisitObservationPeriod(cdm)
-logMessage("Characterise visit observation period")
-visitResult <- summaryInObservation(cdm, "visit_0_gap")
+cdm <- generateVisitObservationPeriod(cdm, "otest")
 
-# 180 visit observation period
-logMessage("Erafy 180 visit observation period")
-cdm <- erafyObservationPeriod(cdm = cdm, gap = 180)
-logMessage("Characterise 180 visit observation period")
-visit180Result <- summaryInObservation(cdm, "visit_180_gap")
+combinations <- tidyr::expand_grid(
+  persistence = c(0L, 180L, 365L, 545L, 730L),
+  surveillance = c(TRUE, FALSE)
+)
+resultPersistenceSurveillance <- combinations |>
+  purrr::pmap(\(persistence, surveillance) {
+    name_id <- paste0("persistence_", persistence, "_surveillance", surveillance)
+    logMessage(paste("Create observation period:", persistence, surveillance))
+    cdm <- generateObservationPeriod(cdm = cdm,
+                                     oname = "otest",
+                                     persistence = persistence,
+                                     surveillance = surveillance)
 
-# 365 visit observation period
-logMessage("Erafy 365 visit observation period")
-cdm <- erafyObservationPeriod(cdm = cdm, gap = 365)
-logMessage("Characterise 365 visit observation period")
-visit365Result <- summaryInObservation(cdm, "visit_365_gap")
-
-# 730 visit observation period
-logMessage("Erafy 730 visit observation period")
-cdm <- erafyObservationPeriod(cdm = cdm, gap = 730)
-logMessage("Characterise 730 visit observation period")
-visit730Result <- summaryInObservation(cdm, "visit_730_gap")
+    logMessage("Characterise visit observation period")
+    summaryInObservation(cdm, name_id)
+  }) |>
+  omopgenerics::bind()
 
 # export data
 logMessage("Export results")
@@ -64,10 +70,7 @@ omopgenerics::exportSummarisedResult(
   originalResult,
   minExtractResult,
   minMaxResult,
-  visitResult,
-  visit180Result,
-  visit365Result,
-  visit730Result,
+  resultPersistenceSurveillance,
   minCellCount = minCellCount,
   fileName = "observation_period_characterisation_{cdm_name}",
   path = here::here("Results")

@@ -150,7 +150,7 @@ generateMinMaxObservationPeriod <- function(cdm) {
 
   return(cdm)
 }
-generateVisitObservationPeriod <- function(cdm) {
+generateVisitObservationPeriod <- function(cdm, name) {
   # initial validation
   omopgenerics::validateCdmArgument(cdm = cdm)
 
@@ -183,7 +183,7 @@ generateVisitObservationPeriod <- function(cdm) {
       .default = .data$end_date
     )) |>
     CohortConstructor:::joinOverlap(
-      name = "observation_period",
+      name = name,
       gap = 0L,
       startDate = "start_date",
       endDate = "end_date",
@@ -191,7 +191,7 @@ generateVisitObservationPeriod <- function(cdm) {
     )
 
   logMessage("final summary")
-  cdm$observation_period <- x |>
+  cdm[[name]] <- x |>
     dplyr::rename(
       observation_period_start_date = "start_date",
       observation_period_end_date = "end_date"
@@ -204,16 +204,30 @@ generateVisitObservationPeriod <- function(cdm) {
       "observation_period_id", "person_id", "observation_period_start_date",
       "observation_period_end_date", "period_type_concept_id"
     ) |>
-    dplyr::compute(name = "observation_period")
+    dplyr::compute(name = name)
 
   return(cdm)
 }
-erafyObservationPeriod <- function(cdm, gap = 0L) {
-  cdm$observation_period <- cdm$observation_period |>
+generateObservationPeriod <- function(cdm,
+                                      oname,
+                                      persistence,
+                                      surveillance) {
+  x <- cdm[[oname]] |>
     dplyr::select(
       "person_id", "observation_period_start_date",
       "observation_period_end_date"
-    ) |>
+    )
+  if (surveillance) {
+    x <- x |>
+      dplyr::mutate(observation_period_end_date = clock::add_days(
+        .data$observation_period_end_date, .env$persistence
+      ))
+    gap <- 0L
+  } else {
+    gap <- persistence
+  }
+
+  cdm$observation_period <- x |>
     CohortConstructor:::joinOverlap(
       name = "observation_period",
       gap = gap,
@@ -234,6 +248,7 @@ erafyObservationPeriod <- function(cdm, gap = 0L) {
 }
 summaryInObservation <- function(cdm, mode) {
   ageGroup <- list(c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, Inf))
+
   logMessage("summarise in observation")
   res1 <- OmopSketch::summariseInObservation(
     cdm$observation_period,
@@ -242,19 +257,137 @@ summaryInObservation <- function(cdm, mode) {
     ageGroup = ageGroup,
     sex = TRUE
   )
+
   logMessage("summarise observation metrics")
-  res2 <- OmopSketch::summariseObservationPeriod(
-    observationPeriod = cdm$observation_period,
-    estimates = c("mean", "sd", "min", "q25", "median", "q75", "max", "density"),
-    ageGroup = ageGroup,
-    sex = TRUE
-  ) |>
-    dplyr::filter(.data$group_level == "all")
+  nm <- omopgenerics::uniqueTableName()
+  characteristics <- cdm$observation_period |>
+    dplyr::mutate(next_observation = dplyr::lead(
+      .data$observation_period_start_date,
+      order_by = .data$observation_period_start_date
+    )) |>
+    diffdate(
+      col1 = c("observation_period_start_date", "observation_period_start_date"),
+      col2 = c("observation_period_end_date", "next_observation"),
+      colname = c("duration", "time_to_next_observation"),
+      plusOne = c(TRUE, FALSE)
+    ) |>
+    PatientProfiles::addAgeQuery(
+      indexDate = "observation_period_start_date",
+      ageName = "age_start",
+      ageGroup = list(age_group_start = ageGroup)
+    ) |>
+    PatientProfiles::addAgeQuery(
+      indexDate = "observation_period_end_date",
+      ageName = "age_end",
+      ageGroup = list(age_group_end = ageGroup)
+    ) |>
+    PatientProfiles::addSexQuery() |>
+    dplyr::select(!c("next_observation")) |>
+    dplyr::compute(name = nm) |>
+    dplyr::left_join(
+      cdm$drug_exposure |>
+        dplyr::select("person_id", start_date = "drug_exposure_start_date") |>
+        dplyr::inner_join(cdm$observation_period, by = "person_id") |>
+        dplyr::filter(
+          .data$start_date >= .data$observation_period_start_date &
+            .data$start_date <= .data$observation_period_end_date
+        ) |>
+        dplyr::group_by(.data$observation_period_id) |>
+        dplyr::summarise(number_drugs = dplyr::n()),
+      by = "observation_period_id"
+    ) |>
+    dplyr::compute(name = nm) |>
+    dplyr::left_join(
+      cdm$condition_occurrence |>
+        dplyr::select("person_id", start_date = "condition_start_date") |>
+        dplyr::inner_join(cdm$observation_period, by = "person_id") |>
+        dplyr::filter(
+          .data$start_date >= .data$observation_period_start_date &
+            .data$start_date <= .data$observation_period_end_date
+        ) |>
+        dplyr::group_by(.data$observation_period_id) |>
+        dplyr::summarise(number_conditions = dplyr::n()),
+      by = "observation_period_id"
+    ) |>
+    dplyr::compute(name = nm) |>
+    dplyr::left_join(
+      cdm$visit_occurrence |>
+        dplyr::select("person_id", start_date = "visit_start_date") |>
+        dplyr::inner_join(cdm$observation_period, by = "person_id") |>
+        dplyr::filter(
+          .data$start_date >= .data$observation_period_start_date &
+            .data$start_date <= .data$observation_period_end_date
+        ) |>
+        dplyr::group_by(.data$observation_period_id) |>
+        dplyr::summarise(number_visits = dplyr::n()),
+      by = "observation_period_id"
+    ) |>
+    dplyr::compute(name = nm) |>
+    dplyr::collect() |>
+    PatientProfiles::summariseResult(
+      variables = list(
+        c("duration", "time_to_next_observation", "age_start", "age_end", "number_conditions", "number_drugs", "number_visits"),
+        c("sex", "age_group_start", "age_group_end")
+      ),
+      estimates = list(
+        c("median", "q25", "q75", "min", "max", "density"),
+        c("count", "percentage")
+      ),
+      counts = TRUE
+    )
+  recordsPerPerson <- cdm$observation_period |>
+    dplyr::group_by(.data$person_id) |>
+    dplyr::summarise(number_observation_periods = dplyr::n()) |>
+    dplyr::collect() |>
+    PatientProfiles::summariseResult(
+      variables = "number_observation_periods",
+      estimates = c("median", "q25", "q75", "min", "max", "density"),
+      counts = FALSE
+    )
+  omopgenerics::dropSourceTable(cdm = cdm, name = nm)
+
+  logMessage("generate denominator cohort")
+  cdm <- IncidencePrevalence::generateDenominatorCohortSet(
+    cdm = cdm,
+    name = "denominator",
+    cohortDateRange = as.Date(c("2012-01-01", NA)),
+    sex = TRUE,
+    ageGroup = ageGroup |>
+      purrr::map(\(x) {
+        x[is.infinite(x)] <- 150
+        x
+      }),
+    daysPriorObservation = 0L
+  )
+
+  logMessage("calculate incidence")
+  incidence <- IncidencePrevalence::estimateIncidence(
+    cdm = cdm,
+    denominatorTable = "denominator",
+    outcomeTable = "outcome",
+    interval = c("years", "overall"),
+    repeatedEvents = TRUE,
+    outcomeWashout = 30,
+    completeDatabaseIntervals = FALSE
+  )
+  omopgenerics::dropSourceTable(cdm = cdm, name = "denominator")
+
   logMessage("bind result")
-  result <- omopgenerics::bind(res1, res2)
+  result <- omopgenerics::bind(
+    res1, incidence, characteristics, recordsPerPerson
+  )
   result |>
     omopgenerics::newSummarisedResult(
       settings = omopgenerics::settings(result) |>
         dplyr::mutate(mode = .env$mode)
     )
+}
+diffdate <- function(x, col1, col2, colname, plusOne) {
+  plusOne <- dplyr::if_else(plusOne, " + 1L", "")
+  q <- "as.integer(local(CDMConnector::datediff('{col1}', '{col2}'))){plusOne}" |>
+    glue::glue(col1 = col1, col2 = col2, plusOne = plusOne) |>
+    as.character() |>
+    rlang::parse_exprs() |>
+    rlang::set_names(nm = colname)
+  dplyr::mutate(x, !!!q)
 }
