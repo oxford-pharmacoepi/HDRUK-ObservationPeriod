@@ -247,14 +247,15 @@ generateObservationPeriod <- function(cdm,
   return(cdm)
 }
 summaryInObservation <- function(cdm, mode) {
-  ageGroup <- list(c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, Inf))
+  ageGroup1 <- list(c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, Inf))
+  ageGroup2 <- list(c(0, 150), c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, 150))
 
   logMessage("summarise in observation")
   res1 <- OmopSketch::summariseInObservation(
     cdm$observation_period,
     interval = "years",
     output = c("records", "person-days"),
-    ageGroup = ageGroup,
+    ageGroup = ageGroup1,
     sex = TRUE
   )
 
@@ -274,12 +275,12 @@ summaryInObservation <- function(cdm, mode) {
     PatientProfiles::addAgeQuery(
       indexDate = "observation_period_start_date",
       ageName = "age_start",
-      ageGroup = list(age_group_start = ageGroup)
+      ageGroup = list(age_group_start = ageGroup1)
     ) |>
     PatientProfiles::addAgeQuery(
       indexDate = "observation_period_end_date",
       ageName = "age_end",
-      ageGroup = list(age_group_end = ageGroup)
+      ageGroup = list(age_group_end = ageGroup1)
     ) |>
     PatientProfiles::addSexQuery() |>
     dplyr::select(!c("next_observation")) |>
@@ -356,11 +357,7 @@ summaryInObservation <- function(cdm, mode) {
     name = "denominator",
     cohortDateRange = as.Date(c("2012-01-01", NA)),
     sex = c("Both", "Female", "Male"),
-    ageGroup = ageGroup |>
-      purrr::map(\(x) {
-        x[is.infinite(x)] <- 150
-        x
-      }),
+    ageGroup = ageGroup2,
     daysPriorObservation = 0L
   )
 
@@ -379,7 +376,8 @@ summaryInObservation <- function(cdm, mode) {
   logMessage("bind result")
   result <- omopgenerics::bind(
     res1, incidence, characteristics, recordsPerPerson
-  )
+  ) |>
+    dplyr::mutate(cdm_name = omopgenerics::cdmName(cdm))
   result |>
     omopgenerics::newSummarisedResult(
       settings = omopgenerics::settings(result) |>
