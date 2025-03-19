@@ -205,7 +205,6 @@ generateVisitObservationPeriod <- function(cdm) {
       "observation_period_end_date", "period_type_concept_id"
     ) |>
     dplyr::compute(name = "observation_period")
-  omopgenerics::dropSourceTable(cdm = cdm, name = nm2)
 
   return(cdm)
 }
