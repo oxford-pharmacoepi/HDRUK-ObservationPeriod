@@ -56,24 +56,13 @@ generateMinDateObservationPeriod <- function(cdm, dataEndDate, censorAge) {
     PatientProfiles::addDateOfBirth(name = nm2) |>
     dplyr::rename(observation_period_start_date = "min_date") |>
     dplyr::mutate(
-      date_age = as.Date(clock::add_years(.data$date_of_birth, !!as.integer(censorAge))),
-      observation_period_end_date = dplyr::if_else(
-        .data$date_age <= .env$dataEndDate, .data$date_age, .env$dataEndDate
-      ),
+      observation_period_end_date = as.Date(clock::add_years(.data$date_of_birth, !!as.integer(censorAge))),
+    ) |>
+    censorObservation(dataEndDate = dataEndDate) |>
+    dplyr::mutate(
       period_type_concept_id = 0L,
       observation_period_id = dplyr::row_number()
     ) |>
-    dplyr::left_join(
-      cdm$death |>
-        dplyr::group_by(.data$person_id) |>
-        dplyr::summarise(death_date = min(.data$death_date, na.rm = TRUE)),
-      by = "person_id"
-    ) |>
-    dplyr::mutate(observation_period_end_date = dplyr::case_when(
-      is.na(.data$death_date) ~ .data$observation_period_end_date,
-      .data$death_date < .data$observation_period_end_date ~ .data$death_date,
-      .default = .data$observation_period_end_date
-    )) |>
     dplyr::select(
       "observation_period_id", "person_id", "observation_period_start_date",
       "observation_period_end_date", "period_type_concept_id"
@@ -83,7 +72,7 @@ generateMinDateObservationPeriod <- function(cdm, dataEndDate, censorAge) {
 
   return(cdm)
 }
-generateMinMaxObservationPeriod <- function(cdm) {
+generateMinMaxObservationPeriod <- function(cdm, dataEndDate) {
   # initial validation
   omopgenerics::validateCdmArgument(cdm = cdm)
 
@@ -137,6 +126,7 @@ generateMinMaxObservationPeriod <- function(cdm) {
       observation_period_start_date = "min_date",
       observation_period_end_date = "max_date"
     ) |>
+    censorObservation(dataEndDate = dataEndDate) |>
     dplyr::mutate(
       period_type_concept_id = 0L,
       observation_period_id = dplyr::row_number()
@@ -211,7 +201,8 @@ generateVisitObservationPeriod <- function(cdm, name) {
 generateObservationPeriod <- function(cdm,
                                       oname,
                                       persistence,
-                                      surveillance) {
+                                      surveillance,
+                                      dataEndDate) {
   x <- cdm[[oname]] |>
     dplyr::select(
       "person_id", "observation_period_start_date",
@@ -235,6 +226,7 @@ generateObservationPeriod <- function(cdm,
       endDate = "observation_period_end_date",
       by = "person_id"
     ) |>
+    censorObservation(dataEndDate = dataEndDate) |>
     dplyr::mutate(
       period_type_concept_id = 0L,
       observation_period_id = dplyr::row_number()
@@ -397,4 +389,29 @@ diffdate <- function(x, col1, col2, colname, plusOne) {
     rlang::set_names(nm = colname)
   x %>%
     dplyr::mutate(!!!q)
+}
+censorObservation <- function(x, dataEndDate) {
+  cdm <- omopgenerics::cdmReference(x)
+  x |>
+    dplyr::left_join(
+      cdm$death |>
+        dplyr::group_by(.data$person_id) |>
+        dplyr::summarise(death_date = min(.data$death_date, na.rm = TRUE)),
+      by = "person_id"
+    ) |>
+    dplyr::mutate(
+      observation_period_end_date = dplyr::case_when(
+        is.na(.data$death_date) ~ .data$observation_period_end_date,
+        .data$death_date <= .data$observation_period_end_date, .data$death_date,
+        .default = .data$observation_period_end_date
+      ),
+      observation_period_end_date = dplyr::if_else(
+        .data$observation_period_end_date <= .env$dataEndDate,
+        .data$observation_period_end_date,
+        .env$dataEndDate
+      )
+    ) |>
+    dplyr::filter(
+      .data$observation_period_start_date <= .data$observation_period_end_date
+    )
 }

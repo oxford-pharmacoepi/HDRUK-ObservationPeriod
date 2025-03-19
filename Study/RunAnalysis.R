@@ -42,7 +42,7 @@ minExtractResult <- summaryInObservation(cdm, "min_extract")
 
 # min-max observation period
 logMessage("Create min-max observation period")
-cdm <- generateMinMaxObservationPeriod(cdm)
+cdm <- generateMinMaxObservationPeriod(cdm, dataEndDate)
 logMessage("Characterise min-max observation period")
 minMaxResult <- summaryInObservation(cdm, "min_max")
 
@@ -61,7 +61,8 @@ resultPersistenceSurveillance <- combinations |>
     cdm <- generateObservationPeriod(cdm = cdm,
                                      oname = "otest",
                                      persistence = persistence,
-                                     surveillance = surveillance)
+                                     surveillance = surveillance,
+                                     dataEndDate = dataEndDate)
 
     logMessage("Characterise visit observation period")
     summaryInObservation(cdm, name_id)
