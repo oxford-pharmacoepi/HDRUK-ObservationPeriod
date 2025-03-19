@@ -27,6 +27,6 @@ x |>
   ggplot2::ggplot(mapping = ggplot2::aes(x = year, y = count, colour = mode)) +
   ggplot2::geom_point() +
   ggplot2::geom_line() +
-  ggplot2::facet_grid(sex ~ cdm_name)
+  ggplot2::facet_grid(sex ~ cdm_name, scales = "free")
 ```
 

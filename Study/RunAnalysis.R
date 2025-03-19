@@ -1,6 +1,6 @@
 
 # source functions and create logger
-source(here::here("functions.R"))
+source(here::here("Analysis", "functions.R"))
 createLog()
 
 dataEndDate <- as.Date(dataEndDate)
