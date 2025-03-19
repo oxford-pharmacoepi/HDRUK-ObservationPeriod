@@ -56,7 +56,7 @@ generateMinDateObservationPeriod <- function(cdm, dataEndDate, censorAge) {
     PatientProfiles::addDateOfBirth(name = nm2) |>
     dplyr::rename(observation_period_start_date = "min_date") |>
     dplyr::mutate(
-      date_age = clock::add_years(.data$date_of_birth, !!as.integer(censorAge)),
+      date_age = as.Date(clock::add_years(.data$date_of_birth, !!as.integer(censorAge))),
       observation_period_end_date = dplyr::if_else(
         .data$date_age <= .env$dataEndDate, .data$date_age, .env$dataEndDate
       ),
@@ -247,20 +247,22 @@ generateObservationPeriod <- function(cdm,
   return(cdm)
 }
 summaryInObservation <- function(cdm, mode) {
-  ageGroup <- list(c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, Inf))
+  ageGroup1 <- list(c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, Inf))
+  ageGroup2 <- list(c(0, 150), c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, 150))
 
   logMessage("summarise in observation")
   res1 <- OmopSketch::summariseInObservation(
     cdm$observation_period,
     interval = "years",
     output = c("records", "person-days"),
-    ageGroup = ageGroup,
+    ageGroup = ageGroup1,
     sex = TRUE
   )
 
   logMessage("summarise observation metrics")
   nm <- omopgenerics::uniqueTableName()
   characteristics <- cdm$observation_period |>
+    dplyr::group_by(.data$person_id) |>
     dplyr::mutate(next_observation = dplyr::lead(
       .data$observation_period_start_date,
       order_by = .data$observation_period_start_date
@@ -271,15 +273,16 @@ summaryInObservation <- function(cdm, mode) {
       colname = c("duration", "time_to_next_observation"),
       plusOne = c(TRUE, FALSE)
     ) |>
+    dplyr::ungroup() |>
     PatientProfiles::addAgeQuery(
       indexDate = "observation_period_start_date",
       ageName = "age_start",
-      ageGroup = list(age_group_start = ageGroup)
+      ageGroup = list(age_group_start = ageGroup1)
     ) |>
     PatientProfiles::addAgeQuery(
       indexDate = "observation_period_end_date",
       ageName = "age_end",
-      ageGroup = list(age_group_end = ageGroup)
+      ageGroup = list(age_group_end = ageGroup1)
     ) |>
     PatientProfiles::addSexQuery() |>
     dplyr::select(!c("next_observation")) |>
@@ -334,16 +337,20 @@ summaryInObservation <- function(cdm, mode) {
         c("count", "percentage")
       ),
       counts = TRUE
-    )
+    ) |>
+    suppressMessages()
   recordsPerPerson <- cdm$observation_period |>
     dplyr::group_by(.data$person_id) |>
-    dplyr::summarise(number_observation_periods = dplyr::n()) |>
+    dplyr::summarise(op_per_person = dplyr::n()) |>
+    dplyr::inner_join(cdm$person |> dplyr::select("person_id"), by = "person_id") |>
     dplyr::collect() |>
+    dplyr::mutate(op_per_person = dplyr::coalesce(as.integer(.data$op_per_person), 0L)) |>
     PatientProfiles::summariseResult(
-      variables = "number_observation_periods",
+      variables = "op_per_person",
       estimates = c("median", "q25", "q75", "min", "max", "density"),
       counts = FALSE
-    )
+    ) |>
+    suppressMessages()
   omopgenerics::dropSourceTable(cdm = cdm, name = nm)
 
   logMessage("generate denominator cohort")
@@ -351,14 +358,11 @@ summaryInObservation <- function(cdm, mode) {
     cdm = cdm,
     name = "denominator",
     cohortDateRange = as.Date(c("2012-01-01", NA)),
-    sex = TRUE,
-    ageGroup = ageGroup |>
-      purrr::map(\(x) {
-        x[is.infinite(x)] <- 150
-        x
-      }),
+    sex = c("Both", "Female", "Male"),
+    ageGroup = ageGroup2,
     daysPriorObservation = 0L
-  )
+  ) |>
+    suppressMessages()
 
   logMessage("calculate incidence")
   incidence <- IncidencePrevalence::estimateIncidence(
@@ -369,13 +373,15 @@ summaryInObservation <- function(cdm, mode) {
     repeatedEvents = TRUE,
     outcomeWashout = 30,
     completeDatabaseIntervals = FALSE
-  )
+  ) |>
+    suppressMessages()
   omopgenerics::dropSourceTable(cdm = cdm, name = "denominator")
 
   logMessage("bind result")
   result <- omopgenerics::bind(
     res1, incidence, characteristics, recordsPerPerson
-  )
+  ) |>
+    dplyr::mutate(cdm_name = omopgenerics::cdmName(cdm))
   result |>
     omopgenerics::newSummarisedResult(
       settings = omopgenerics::settings(result) |>
@@ -389,5 +395,6 @@ diffdate <- function(x, col1, col2, colname, plusOne) {
     as.character() |>
     rlang::parse_exprs() |>
     rlang::set_names(nm = colname)
-  dplyr::mutate(x, !!!q)
+  x %>%
+    dplyr::mutate(!!!q)
 }

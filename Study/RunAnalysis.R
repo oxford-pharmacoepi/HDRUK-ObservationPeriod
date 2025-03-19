@@ -1,3 +1,4 @@
+library(magrittr)
 
 # source functions and create logger
 source(here::here("Analysis", "functions.R"))
@@ -20,11 +21,14 @@ snapshot <- OmopSketch::summariseOmopSnapshot(cdm)
 # instantiate antibiotics cohorts
 logMessage("Instantiate antibiotics cohorts")
 codelist <- CodelistGenerator::getDrugIngredientCodes(
-  cdm = cdm, name = c("acetaminophen")
+  cdm = cdm,
+  name = c("azithromycin", "ciprofloxacin", "teicoplanin"),
+  nameStyle = "{concept_name}"
 )
 cdm <- DrugUtilisation::generateDrugUtilisationCohortSet(
   cdm = cdm, conceptSet = codelist, name = "outcome"
-)
+) |>
+  suppressMessages()
 
 # original observation period
 logMessage("Characterise original observation period")
@@ -45,10 +49,11 @@ minMaxResult <- summaryInObservation(cdm, "min_max")
 logMessage("Create visit observation period")
 cdm <- generateVisitObservationPeriod(cdm, "otest")
 
-combinations <- tidyr::expand_grid(
-  persistence = c(0L, 180L, 365L, 545L, 730L),
-  surveillance = c(TRUE, FALSE)
-)
+combinations <- dplyr::tibble(persistence = 0L, surveillance = FALSE) |>
+  dplyr::union_all(tidyr::expand_grid(
+    persistence = c(180L, 365L, 545L, 730L),
+    surveillance = c(TRUE, FALSE)
+  ))
 resultPersistenceSurveillance <- combinations |>
   purrr::pmap(\(persistence, surveillance) {
     name_id <- paste0("persistence_", persistence, "_surveillance", surveillance)
