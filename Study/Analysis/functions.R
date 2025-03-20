@@ -391,6 +391,7 @@ diffdate <- function(x, col1, col2, colname, plusOne) {
     dplyr::mutate(!!!q)
 }
 censorObservation <- function(x, dataEndDate) {
+  dataEndDate <- as.Date(dataEndDate)
   cdm <- omopgenerics::cdmReference(x)
   x |>
     dplyr::left_join(
@@ -402,7 +403,7 @@ censorObservation <- function(x, dataEndDate) {
     dplyr::mutate(
       observation_period_end_date = dplyr::case_when(
         is.na(.data$death_date) ~ .data$observation_period_end_date,
-        .data$death_date <= .data$observation_period_end_date, .data$death_date,
+        .data$death_date <= .data$observation_period_end_date ~ .data$death_date,
         .default = .data$observation_period_end_date
       ),
       observation_period_end_date = dplyr::if_else(
