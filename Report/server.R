@@ -121,7 +121,8 @@ server <- function(input, output, session) {
         .data$outcome %in% input$incidence_outcome,
         .data$age_group %in% input$incidence_age_group,
         .data$sex %in% input$incidence_sex,
-        .data$analysis_interval %in% input$incidence_interval
+        .data$analysis_interval %in% input$incidence_interval,
+        .data$mode %in% input$incidence_mode
       )
   })
   output$incidence_gt <- gt::render_gt({
