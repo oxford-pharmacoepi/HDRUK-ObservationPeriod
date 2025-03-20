@@ -46,6 +46,12 @@ cdm <- generateMinMaxObservationPeriod(cdm, dataEndDate)
 logMessage("Characterise min-max observation period")
 minMaxResult <- summaryInObservation(cdm, "min_max")
 
+# impatient observation period
+logMessage("Create impatient observation period")
+cdm <- generateImpatientObservationPeriod(cdm)
+logMessage("Characterise impatient observation period")
+impatientResult <- summaryInObservation(cdm, "impatient")
+
 logMessage("Create visit observation period")
 cdm <- generateVisitObservationPeriod(cdm, "otest")
 
@@ -76,6 +82,7 @@ omopgenerics::exportSummarisedResult(
   originalResult,
   minExtractResult,
   minMaxResult,
+  impatientResult,
   resultPersistenceSurveillance,
   minCellCount = minCellCount,
   fileName = "observation_period_characterisation_{cdm_name}",

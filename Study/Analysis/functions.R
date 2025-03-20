@@ -239,6 +239,12 @@ generateObservationPeriod <- function(cdm,
   return(cdm)
 }
 summaryInObservation <- function(cdm, mode) {
+
+  if (omopgenerics::isTableEmpty(cdm$observation_period)) {
+    logMessage(paste("Empty observation period for:", mode, "definition"))
+    return(omopgenerics::emptySummarisedResult())
+  }
+
   ageGroup1 <- list(c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, Inf))
   ageGroup2 <- list(c(0, 150), c(0, 19), c(20, 39), c(40, 59), c(60, 79), c(80, 150))
 
@@ -319,13 +325,18 @@ summaryInObservation <- function(cdm, mode) {
     ) |>
     dplyr::compute(name = nm) |>
     dplyr::collect() |>
+    dplyr::mutate(
+      drugs_per_day = .data$number_drugs / .data$duration,
+      conditions_per_day = .data$number_conditions / .data$duration,
+      visits_per_day = .data$number_visits / .data$duration
+    ) |>
     PatientProfiles::summariseResult(
       variables = list(
-        c("duration", "time_to_next_observation", "age_start", "age_end", "number_conditions", "number_drugs", "number_visits"),
+        c("duration", "time_to_next_observation", "age_start", "age_end", "number_conditions", "number_drugs", "number_visits", "conditions_per_day", "drugs_per_day", "visits_per_day"),
         c("sex", "age_group_start", "age_group_end")
       ),
       estimates = list(
-        c("median", "q25", "q75", "min", "max", "density"),
+        c("median", "q25", "q75", "min", "max", "mean", "sd"),
         c("count", "percentage")
       ),
       counts = TRUE
@@ -339,7 +350,7 @@ summaryInObservation <- function(cdm, mode) {
     dplyr::mutate(op_per_person = dplyr::coalesce(as.integer(.data$op_per_person), 0L)) |>
     PatientProfiles::summariseResult(
       variables = "op_per_person",
-      estimates = c("median", "q25", "q75", "min", "max", "density"),
+      estimates = c("median", "q25", "q75", "min", "max", "mean", "sd"),
       counts = FALSE
     ) |>
     suppressMessages()
@@ -415,4 +426,29 @@ censorObservation <- function(x, dataEndDate) {
     dplyr::filter(
       .data$observation_period_start_date <= .data$observation_period_end_date
     )
+}
+generateImpatientObservationPeriod <- function(cdm) {
+  cdm$observation_period <- cdm$visit_occurrence |>
+    dplyr::filter(.data$visit_concept_id %in% c(9201, 262)) |>
+    dplyr::select("person_id", "visit_start_date", "visit_end_date") |>
+    CohortConstructor:::joinOverlap(
+      name = "observation_period",
+      gap = 0,
+      startDate = "visit_start_date",
+      endDate = "visit_end_date",
+      by = "person_id"
+    ) |>
+    dplyr::mutate(
+      period_type_concept_id = 0L,
+      observation_period_id = dplyr::row_number()
+    ) |>
+    dplyr::select(
+      "observation_period_id",
+      "person_id",
+      "observation_period_start_date" = "visit_start_date",
+      "observation_period_end_date" = "visit_end_date",
+      "period_type_concept_id"
+    ) |>
+    dplyr::compute(name = "observation_period")
+  return(cdm)
 }
