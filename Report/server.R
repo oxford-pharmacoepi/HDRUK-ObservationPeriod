@@ -49,7 +49,8 @@ server <- function(input, output, session) {
       ribbon = FALSE,
       colour = input$summarise_in_observation_colour,
       facet = form
-    )
+    ) +
+      ggplot2::xlim(input$summarise_in_observation_x_range)
   })
 
   # summarise_observation_period -----

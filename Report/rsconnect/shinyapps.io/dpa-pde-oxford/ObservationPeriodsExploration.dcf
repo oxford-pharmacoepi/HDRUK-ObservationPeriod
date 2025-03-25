@@ -1,0 +1,12 @@
+name: ObservationPeriodsExploration
+title: ObservationPeriodsExploration
+username: dpa-pde-oxford
+account: dpa-pde-oxford
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14303460
+bundleId: 9980823
+url: https://dpa-pde-oxford.shinyapps.io/ObservationPeriodsExploration/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

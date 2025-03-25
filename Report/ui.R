@@ -109,6 +109,14 @@ ui <- bslib::page_navbar(
                   multiple = TRUE,
                   options = list(`actions-box` = TRUE, size = 10, `selected-text-format` = "count > 3")
                 ),
+                shiny::sliderInput(
+                  inputId = "summarise_in_observation_x_range",
+                  label = "Year range",
+                  min = 1990L,
+                  max = 2025L,
+                  value = c(2010L, 2025L),
+                  step = 1L
+                ),
                 position = "right"
               ),
               shiny::plotOutput("summarise_in_observation_ggplot2")

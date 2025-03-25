@@ -21,4 +21,34 @@ generateObservationPeriod <- function(cdm,
     "visit_occurrence", "device_exposure", "measurement", "observation", "death"
   ))
   recordsFrom <- unique(recordsFrom)
+  if (!is.infinite(censorAge)) censorAge <- as.integer(censorAge)
+
+  if (length(recordsFrom) == 0) {
+    # return empty
+  }
+
+  name <- omopgenerics::uniqueTableName()
+  x <- getTemptativeDates(
+    cdm = cdm, tables = recordsFrom, collapse = collapseEra,
+    window = persistenceWindow, name = name
+  )
+
+}
+getTemptativeDates <- function(cdm, tables, collapse, window, name) {
+  if (is.infinite(collapseEra)) {
+    if (is.infinite(persistenceWindow)) {
+      end <- FALSE
+    } else {
+      end <- TRUE
+    }
+    q <- c(
+      "min(as.Date(.data[['{startDate}']]), na.rm = TRUE)",
+      "min(dplyr::coalesce(as.Date(.data[['{endDate}']]), as.Date(.data[['{startDate}']])), na.rm = TRUE)"
+    ) |>
+      rlang::set_names(c("start_date", "end_date"))
+    q <- q[c(TRUE, end)]
+
+  } else {
+
+  }
 }
