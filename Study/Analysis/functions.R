@@ -29,7 +29,7 @@ generateMinDateObservationPeriod <- function(cdm, dataEndDate, censorAge) {
     xk <- cdm[[table]] |>
       dplyr::group_by(.data$person_id) |>
       dplyr::summarise(
-        start_date = min(.data[[startDate]], na.rm = TRUE),
+        start_date = min(as.Date(.data[[startDate]]), na.rm = TRUE),
         .groups = "drop"
       ) |>
       dplyr::compute(name = nm1)
@@ -89,8 +89,8 @@ generateMinMaxObservationPeriod <- function(cdm, dataEndDate) {
     xk <- cdm[[table]] |>
       dplyr::group_by(.data$person_id) |>
       dplyr::summarise(
-        start_date = min(.data[[startDate]], na.rm = TRUE),
-        end_date = max(.data[[endDate]], na.rm = TRUE),
+        start_date = min(as.Date(.data[[startDate]]), na.rm = TRUE),
+        end_date = max(as.Date(.data[[endDate]]), na.rm = TRUE),
         .groups = "drop"
       ) |>
       dplyr::compute(name = nm1)
@@ -157,6 +157,10 @@ generateVisitObservationPeriod <- function(cdm, name) {
         "person_id",
         "start_date" = dplyr::all_of(startDate),
         "end_date" = dplyr::all_of(endDate)
+      ) |>
+      dplyr::mutate(
+        start_date = as.Date(.data$start_date),
+        end_date = as.Date(.data$end_date)
       )
     if (k > 1) {
       x <- x |>
@@ -210,9 +214,9 @@ generateObservationPeriod <- function(cdm,
     )
   if (surveillance) {
     x <- x |>
-      dplyr::mutate(observation_period_end_date = clock::add_days(
+      dplyr::mutate(observation_period_end_date = as.Date(clock::add_days(
         .data$observation_period_end_date, .env$persistence
-      ))
+      )))
     gap <- 0L
   } else {
     gap <- persistence
@@ -431,6 +435,10 @@ generateImpatientObservationPeriod <- function(cdm) {
   cdm$observation_period <- cdm$visit_occurrence |>
     dplyr::filter(.data$visit_concept_id %in% c(9201, 262)) |>
     dplyr::select("person_id", "visit_start_date", "visit_end_date") |>
+    dplyr::mutate(
+      visit_start_date = as.Date(.data$visit_start_date),
+      visit_end_date = as.Date(.data$visit_end_date)
+    ) |>
     CohortConstructor:::joinOverlap(
       name = "observation_period",
       gap = 0,
