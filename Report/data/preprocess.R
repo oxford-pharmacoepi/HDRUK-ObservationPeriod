@@ -3,7 +3,7 @@ result <- omopgenerics::importSummarisedResult(file.path(getwd(), "data"))
 
 mode <- dplyr::tribble(
   ~mode, ~new_mode,
-  "original_data", "Original",
+  "original_data", "Bespoke",
   "min_extract", "First record to extract",
   "min_max", "First to last record",
   "impatient", "Inpatient hospitalisation",
